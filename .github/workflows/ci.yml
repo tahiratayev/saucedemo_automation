@@ -1,0 +1,102 @@
+name: CI — SauceDemo Automation
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  api-tests:
+    name: API Tests (Mock Server)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run API tests
+        run: pytest -m api --tb=short
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-test-results
+          path: reports/
+
+  smoke-tests:
+    name: Smoke Tests (UI)
+    runs-on: ubuntu-latest
+    needs: api-tests
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install Playwright browsers
+        run: playwright install chromium --with-deps
+
+      - name: Run smoke tests
+        env:
+          BASE_URL: ${{ secrets.BASE_URL }}
+          VALID_USERNAME: ${{ secrets.VALID_USERNAME }}
+          VALID_PASSWORD: ${{ secrets.VALID_PASSWORD }}
+          LOCKED_USERNAME: ${{ secrets.LOCKED_USERNAME }}
+        run: pytest -m smoke --tb=short
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-test-results
+          path: reports/
+
+  regression-tests:
+    name: Full Regression Suite
+    runs-on: ubuntu-latest
+    needs: smoke-tests
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install Playwright browsers
+        run: playwright install chromium --with-deps
+
+      - name: Run full regression
+        env:
+          BASE_URL: ${{ secrets.BASE_URL }}
+          VALID_USERNAME: ${{ secrets.VALID_USERNAME }}
+          VALID_PASSWORD: ${{ secrets.VALID_PASSWORD }}
+          LOCKED_USERNAME: ${{ secrets.LOCKED_USERNAME }}
+        run: pytest --tb=short
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: regression-test-results
+          path: reports/
